@@ -1,0 +1,29 @@
+.wrapper {
+    background: white;
+    height: 100%;
+    overflow: auto;
+    padding: 5px 5px 90px 5px ;
+    margin: 0;
+}
+
+.wrapper .panel.well {
+    padding: 5px;
+    margin-bottom: 5px;
+}
+
+.wrapper .panel.well .header {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.row.well {
+    margin: 0;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+}
+
+.input-group .form-control,
+.input-group-btn:last-child>.btn{
+    z-index: 0;
+}

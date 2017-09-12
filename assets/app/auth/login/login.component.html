@@ -1,0 +1,15 @@
+<div class="login-window">
+    <form (ngSubmit)="onSubmit(f)" #f="ngForm">
+        <div class="form-group">
+            <label for="login">Login</label>
+            <input type="text" id="login" class="form-control" ngModel name="login" required #login="ngModel">
+            <span class="help-block" *ngIf="!login.valid && login.dirty">This field is required!</span>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" class="form-control" ngModel name="password" required #password="ngModel">
+            <span class="help-block" *ngIf="!password.valid && password.dirty">This field is required!</span>
+        </div>
+        <button class="btn btn-primary" type="submit" [disabled]="!f.valid">Submit</button>
+    </form>
+</div>

@@ -1,0 +1,14 @@
+.registration-window {
+    padding: 10px;
+}
+
+.registration-window .form-control.ng-invalid.ng-dirty {
+    border-color: red;
+}
+
+.help-block {
+    color: red;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 0 2px;
+}

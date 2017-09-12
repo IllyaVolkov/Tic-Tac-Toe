@@ -1,0 +1,28 @@
+.players-online h2 {
+    color: white;
+    background: rgba(0,0,0,0.2);
+    margin: 0;
+    padding: 15px;
+}
+
+.chat h2 {
+    color: white;
+    background: rgba(0,0,0,0.2);
+    margin: 0;
+    padding: 15px;
+}
+
+.app-body {
+    height: 600px;
+    width: 100%;
+}
+
+.chat, .players-online {
+    padding: 0;
+    height: 100%;
+}
+
+chat, players-online {
+    height: 530px;
+    display: block;
+}

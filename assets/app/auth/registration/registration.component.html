@@ -1,0 +1,30 @@
+<div class="registration-window">
+    <form (ngSubmit)="onSubmit(f)" #f="ngForm">
+        <div class="form-group">
+            <label for="login">Login</label>
+            <input type="text" id="login" class="form-control" ngModel name="login" required #login="ngModel">
+            <span class="help-block" *ngIf="!login.valid && login.dirty">This field is required!</span>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" class="form-control" ngModel name="password" required #password="ngModel">
+            <span class="help-block" *ngIf="!password.valid && password.dirty">This field is required!</span>
+        </div>
+        <div class="form-group">
+            <label for="repeat">Repeat Password</label>
+            <input type="password" id="repeat" class="form-control" ngModel name="repeat" required #repeat="ngModel">
+            <span class="help-block" *ngIf="repeat.value !== password.value && repeat.dirty">Passwords don`t match!</span>
+        </div>
+        <div class="form-group">
+            <label for="name">Full Name</label>
+            <input type="text" id="name" class="form-control" ngModel name="name" required #name="ngModel">
+            <span class="help-block" *ngIf="!name.valid && name.dirty">This field is required!</span>
+        </div>
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="text" id="email" class="form-control" ngModel name="email" required email #email="ngModel">
+            <span class="help-block" *ngIf="!email.valid && email.dirty">Incorrect email!</span>
+        </div>
+        <button class="btn btn-primary" type="submit" [disabled]="!f.valid || repeat.value !== password.value">Submit</button>
+    </form>
+</div>

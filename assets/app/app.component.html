@@ -1,0 +1,12 @@
+<app-header></app-header>
+<div class="app-body" *ngIf="user_connected">
+    <div class="players-online col-lg-6 col-md-6 col-sm-12 col-xs-12 container">
+        <h2>Players online</h2>
+        <players-online [data]="users_online" [user]="user_connected"></players-online>
+    </div>
+    <div class="chat col-lg-6 col-md-6 col-sm-12 col-xs-12 container">
+        <h2>Public chat</h2>
+        <chat [data]="messages"></chat>
+    </div>
+</div>
+<router-outlet></router-outlet>

@@ -1,0 +1,61 @@
+.game-window {
+    background-color: #ffffff;
+    width: 456px;
+    height: 456px;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -60%);
+}
+
+.info-window {
+    width: 500px;
+    height: 260px;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, 200px);
+}
+
+.info-window p {
+    text-align: center;
+    color: white;
+    font-size: 22px;
+}
+
+.info-window button {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.game-background {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+table tr {
+    width: 100%;
+    border: 1px solid blue;
+}
+
+table td {
+    display: block;
+    width: 150px;
+    height: 150px;
+    background: white;
+    border: 1px solid red;
+    float: left;
+    cursor: pointer;
+}
+
+table td img{
+    width: 100%;
+    height: 100%;
+}

@@ -1,0 +1,16 @@
+<div class="row wrapper" #messages>
+    <div class ="panel well" *ngFor="let message of data">
+        <span class="header">{{message.author}}:</span>
+        <span>{{message.text}}</span>
+    </div>
+</div>
+<div class="row well" id="msg_form">
+    <div class="col-md-12">
+        <form class="input-group" (submit)="sendMessage(input.value, $event); input.value = ''">
+            <input #input type="text" id="inp" class="form-control input-lg" placeholder="Message..." />
+            <span class="input-group-btn">
+                <button class="btn btn-lg btn-success" type="submit" id="btn">Send!</button>
+            </span>
+        </form>
+    </div>
+</div>

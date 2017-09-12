@@ -1,0 +1,9 @@
+<div class="auth-background" (click)="router.navigate(['/'])">
+    <div class="auth-window" (click)="$event.stopPropagation()">
+        <div class="top-block">
+            <button [ngClass]="{'clicked': isLoginPage}" (click)="handleLoginPress($event)">Login</button>
+            <button [ngClass]="{'clicked': !isLoginPage}" (click)="handleRegistrationPress($event)">Registration</button>
+        </div>
+        <router-outlet></router-outlet>
+    </div>
+</div>

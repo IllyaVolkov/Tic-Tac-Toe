@@ -1,0 +1,12 @@
+<div class="row wrapper">
+    <h1 class="col-lg-offset-4 col-lg-4 col-md-offset-4 col-md-4 col-sm-offset-2 col-sm-4 col-xs-offset-2 col-xs-4 label">Tic tac toe!</h1>
+    <div class="auth-buttons" class="col-lg-4 col-md-4 col-sm-6 col-xs-6" *ngIf="!user_connected">
+        <button class="btn btn-primary" (click)="router.navigate(['./auth/login'])">Log in</button>
+        <button class="btn btn-success" (click)="router.navigate(['./auth/registration'])">Register</button>
+    </div>
+
+    <div class="auth-buttons" class="col-lg-4 col-md-4 col-sm-6 col-xs-6" *ngIf="user_connected">
+        <span>{{user_connected.Login}}</span>
+        <button class="btn btn-success" (click)="disconnect()">Log out</button>
+    </div>
+</div>

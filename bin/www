@@ -1,0 +1,489 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('angular2-nodejs:server');
+var http = require('http');
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * Add socket handler.
+ */
+
+var jwt = require('jsonwebtoken');
+const SECRET = require('../server/constants/constants').SECRET;
+var pool = require('../server/database/connectionPool');
+var queries = require('../server/database/queries');
+
+var connections = [];
+var userTokens = [];
+var userData = [];
+
+//gameData
+
+var rooms = [];
+var games = [];
+var users = [];
+var currentTurns = [];
+
+var io = require('socket.io').listen(server);
+io.on('connection', function (socket) {
+    socket.on('authenticate',function (data) {
+        var token = data.token;
+
+        if (!token) {
+            socket.emit('denied');
+            socket.disconnect();
+            return;
+        }
+        jwt.verify(token, SECRET, function(err, decoded) {
+            if (err) {
+                socket.emit('denied');
+                socket.disconnect();
+            } else {
+                var user;
+                pool.getConnection(function (err, connection) {
+                    if (err) {
+                        console.log(err.stack);
+                        return;
+                    }
+                    var query = queries.getUserDataByLogin(decoded.Login, connection);
+                    query.on('end', function() {
+                        connection.release();
+                        if (queries.selectedRow) {
+                            user = {
+                                Login: queries.selectedRow.Login,
+                                Password: null,
+                                Name: queries.selectedRow.Name,
+                                Email: queries.selectedRow.Email,
+                                Rank: queries.selectedRow.Rank
+                            };
+                            socket.emit('allowed', {user: user});
+                            if (connections.indexOf(socket) === -1) {
+                                user.Status = 'online';
+                                connections.push(socket);
+                                userTokens.push(token);
+                                userData.push(user);
+                            }
+                        }
+                    });
+                    query.on('error', function(err) {
+                        connection.release();
+                    });
+                });
+            }
+        });
+    });
+
+    socket.on('disconnect', function (data) {
+        if (socket.room) {
+            var leaverIndex = connections.indexOf(socket);
+            pool.getConnection(function (err, connection) {
+                if (err) {
+                    console.log(err.stack);
+                    return;
+                }
+                var query = queries.doubleDecreaseRank(userData[leaverIndex].Login, connection);
+                query.on('end', function() {
+                    connection.release();
+                });
+            });
+            userData[leaverIndex].Rank = parseInt(userData[leaverIndex].Rank) - 2 + '';
+            io.to(socket.room).emit('opponent disconnected');
+            var index = rooms.indexOf(socket.room);
+            for (var i = 0; i < users[index].length; i++) {
+                for (var j = 0; j < userData.length; j++) {
+                    if (userData[j].Login === users[index][i].Login) {
+                        userData[j].Status = 'online';
+                    }
+                }
+            }
+            closeRoom(socket.room);
+            endGame(index);
+            // decrease double rank
+        }
+        var index = connections.indexOf(socket);
+        connections.splice(index, 1);
+        userTokens.splice(index, 1);
+        userData.splice(index, 1);
+        io.sockets.emit('users loaded', userData);
+    });
+
+    socket.on('send message', function (data) {
+        io.sockets.emit('chat message', data);
+    });
+
+    socket.on('load users', function () {
+        io.sockets.emit('users loaded', userData);
+    });
+
+    socket.on('log out', function (data) {
+        socket.disconnect();
+    });
+
+    socket.on('getRoom', function(data) {
+        var index = connections.indexOf(socket);
+        var opponentIndex = -1;
+        var roomName = '';
+
+        for (var i = 0; i < userData.length; i++) {
+            if (userData[i].Login === data.requestLogin) {
+                opponentIndex = i;
+            }
+        }
+        userData[index].Status = 'playing';
+        io.sockets.emit('users loaded', userData);
+        roomName = combineStrings(userTokens[index], userTokens[opponentIndex]);
+        connections[opponentIndex].emit('invite', {room: roomName, user: data.user});
+        socket.emit('sendRoom', {room: roomName});
+    });
+
+    socket.on('createRoom', function (data) {
+        socket.room = data.room;
+        socket.join(data.room);
+        rooms.push(data.room);
+        var gameData = [['','',''],
+                        ['','',''],
+                        ['','','']];
+        games.push(gameData);
+        users.push([data.user]);
+        currentTurns.push('cross');
+    });
+
+    socket.on('decline', function (data) {
+        io.to(data.room).emit('declined');
+    });
+
+    socket.on('accept', function (data) {
+        var index = rooms.indexOf(data.room);
+        socket.room = data.room;
+        socket.join(data.room);
+        users[index].push(data.user);
+        if (Math.random() < 0.5) {
+            users[index][0].Role = 'cross';
+            users[index][1].Role = 'zero';
+        } else {
+            users[index][1].Role = 'cross';
+            users[index][0].Role = 'zero';
+        }
+        io.to(data.room).emit('startGame', {game: games[index], users: users[index]});
+    });
+
+    socket.on('declineServer', function () {
+        var index = rooms.indexOf(socket.room);
+        rooms.splice(index, 1);
+        games.splice(index, 1);
+        users.splice(index, 1);
+        currentTurns.splice(index, 1);
+        socket.leave(socket.room);
+        socket.room = null;
+        index = connections.indexOf(socket);
+        userData[index].Status = 'online';
+        io.sockets.emit('users loaded', userData);
+    });
+
+    socket.on('turn', function (data) {
+        var index = rooms.indexOf(socket.room);
+        var user = userData[connections.indexOf(socket)];
+        var userIndex = 0;
+        if (users[index][0].Login !== user.Login) {
+            userIndex = 1
+        }
+        if (currentTurns[index] === users[index][userIndex].Role) {
+            games[index][data.row][data.col] = users[index][userIndex].Role;
+            io.to(socket.room).emit('turned', {game: games[index]});
+            currentTurns[index] = currentTurns[index] === 'cross' ? 'zero' : 'cross';
+            var turnResult = checkWinner(games[index]);
+            switch (turnResult) {
+                case 'cross':
+                case 'zero': {
+                    for (var i = 0; i < users[index].length; i++) {
+                        var currSocket;
+                        var userDataIndex;
+                        for (var j = 0; j < userData.length; j++) {
+                            if (userData[j].Login === users[index][i].Login) {
+                                currSocket = connections[j];
+                                userDataIndex = j;
+                                userData[j].Status = 'online';
+                            }
+                        }
+                        if (users[index][i].Role === turnResult) {
+                            // increase rank
+                            decreaseUserRank(userDataIndex);
+                            currSocket.emit('won');
+                        } else {
+                            // decrease rank
+                            decreaseUserRank(userDataIndex);
+                            currSocket.emit('lost');
+                        }
+                    }
+                    io.sockets.emit('users loaded', userData);
+                    closeRoom(socket.room);
+                    endGame(index);
+                    break;
+                }
+                case 'draw': {
+                    for (var i = 0; i < users[index].length; i++) {
+                        for (var j = 0; j < userData.length; j++) {
+                            if (userData[j].Login === users[index][i].Login) {
+                                userData[j].Status = 'online';
+                            }
+                        }
+                    }
+                    io.to(socket.room).emit('draw');
+                    io.sockets.emit('users loaded', userData);
+                    closeRoom(socket.room);
+                    endGame(index);
+                    break;
+                }
+            }
+        } else {
+            socket.emit('decline turn');
+        }
+    });
+
+    socket.on('leave game', function () {
+        if (socket.room) {
+            var leaverIndex = connections.indexOf(socket);
+            pool.getConnection(function (err, connection) {
+                if (err) {
+                    console.log(err.stack);
+                    return;
+                }
+                var query = queries.doubleDecreaseRank(userData[leaverIndex].Login, connection);
+                query.on('end', function() {
+                    connection.release();
+                });
+            });
+            userData[leaverIndex].Rank = parseInt(userData[leaverIndex].Rank) - 2 + '';
+            socket.broadcast.to(socket.room).emit('opponent disconnected');
+            var index = rooms.indexOf(socket.room);
+            for (var i = 0; i < users[index].length; i++) {
+                for (var j = 0; j < userData.length; j++) {
+                    if (userData[j].Login === users[index][i].Login) {
+                        userData[j].Status = 'online';
+                    }
+                }
+            }
+            closeRoom(socket.room);
+            endGame(index);
+            io.sockets.emit('users loaded', userData);
+        }
+    });
+});
+
+function increaseUserRank(userDataIndex) {
+    pool.getConnection(function (err, connection) {
+        if (err) {
+            console.log(err.stack);
+            return;
+        }
+        var query = queries.increaseRank(userData[userDataIndex].Login, connection);
+        query.on('end', function() {
+            connection.release();
+        });
+    });
+    userData[userDataIndex].Rank = parseInt(userData[userDataIndex].Rank) + 1 + '';
+}
+
+function decreaseUserRank(userDataIndex) {
+    pool.getConnection(function (err, connection) {
+        if (err) {
+            console.log(err.stack);
+            return;
+        }
+        var query = queries.decreaseRank(userData[userDataIndex].Login, connection);
+        query.on('end', function() {
+            connection.release();
+        });
+    });
+    userData[userDataIndex].Rank = parseInt(userData[userDataIndex].Rank) - 1 + '';
+}
+
+function closeRoom(room) {
+    try {
+        var sockets = io.in('/').adapter.rooms[room].sockets;
+        for (var socketId in sockets) {
+            io.sockets.connected[socketId].room = null;
+            io.sockets.connected[socketId].leave(room);
+        }
+    } catch (e) {
+        console.log(e.stack);
+    }
+}
+
+function endGame(index) {
+    for (var i = 0; i < users[index].length; i++) {
+        for (var j = 0; j < userData.length; j++) {
+            if (userData[j].Login === users[index][i].Login) {
+                userData[j].Status = 'online';
+            }
+        }
+    }
+    try {
+        games.splice(index, 1);
+        rooms.splice(index, 1);
+        users.splice(index, 1);
+        currentTurns.splice(index, 1);
+    } catch (e) {
+        console.log(e.stack);
+    }
+    io.sockets.emit('users loaded', userData);
+}
+
+function checkWinner(gameData) {
+    try {
+        var winner = '';
+        // check 3 in row
+        for (var i = 0; i < gameData.length; i++) {
+            for (var j = 0; j < gameData.length - 1; j++) {
+                if (gameData[i][j] === gameData[i][j + 1]) {
+                    winner = gameData[i][j];
+                } else {
+                    winner = '';
+                    break;
+                }
+            }
+            if (winner !== '') {
+                return winner;
+            }
+        }
+        // check 3 in col
+        for (var i = 0; i < gameData.length; i++) {
+            for (var j = 0; j < gameData.length - 1; j++) {
+                if (gameData[j][i] === gameData[j + 1][i]) {
+                    winner = gameData[j][i];
+                } else {
+                    winner = '';
+                    break;
+                }
+            }
+            if (winner !== '') {
+                return winner;
+            }
+        }
+        // check main diagonal
+        for (var i = 0; i < gameData.length - 1; i++) {
+            if (gameData[i][i] === gameData[i + 1][i + 1]) {
+                winner = gameData[i][i];
+            } else {
+                winner = '';
+                break;
+            }
+        }
+        if (winner !== '') {
+            return winner;
+        }
+        // check side diagonal
+        var lastIndex = gameData.length - 1;
+        for (var i = 0; i < gameData.length - 1; i++) {
+            if (gameData[lastIndex - i][i] === gameData[lastIndex - i - 1][i + 1]) {
+                winner = gameData[lastIndex - i][i];
+            } else {
+                winner = '';
+                break;
+            }
+        }
+        if (winner !== '') {
+            return winner;
+        }
+        // check for draw
+        for (var i = 0; i < gameData.length; i++) {
+            for (var j = 0; j < gameData.length - 1; j++) {
+                if (gameData[i][j] === '') {
+                    return '';
+                }
+            }
+        }
+    } catch (e) {
+        console.log(e.stack);
+    }
+    return 'draw';
+}
+
+function combineStrings(str1, str2) {
+    return str1.slice(0, 5) + str2.slice(0, 5);
+}
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}

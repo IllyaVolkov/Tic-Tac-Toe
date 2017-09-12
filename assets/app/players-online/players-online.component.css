@@ -1,0 +1,9 @@
+.table {
+    background: white;
+    max-height: 100%;
+    overflow: auto;
+}
+
+.table button {
+    padding: 0 6px;
+}
